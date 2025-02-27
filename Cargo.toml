@@ -2,6 +2,7 @@
 name = "rust-repl"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 [dependencies]
 rustc_codegen_cranelift = { git = "https://github.com/rust-lang/rustc_codegen_cranelift.git", revision = "30ece8da06882b9cbca9f7e73f6804c669449a17", features = [ "jit" ] }
