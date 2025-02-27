@@ -1,0 +1,18 @@
+[package]
+name = "rust-repl"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rustc_codegen_cranelift = { git = "https://github.com/rust-lang/rustc_codegen_cranelift.git", revision = "30ece8da06882b9cbca9f7e73f6804c669449a17", features = [ "jit" ] }
+rustyline = "15.0.0"
+#rustc = { git = "https://github.com/rust-lang/rust.git", revision = "96cfc75584359ae7ad11cc45968059f29e7b44b7" }
+
+[build-dependencies]
+patch-crate = "0.1.12"
+
+[package.metadata.patch]
+crates = ["rustc_codegen_cranelift"]
+
+[patch."https://github.com/rust-lang/rustc_codegen_cranelift.git"]
+rustc_codegen_cranelift = { path="./target/patch/30ece8d" }

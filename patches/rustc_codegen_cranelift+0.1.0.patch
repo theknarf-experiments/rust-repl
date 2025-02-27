@@ -1,0 +1,187 @@
+diff --git a/src/driver/aot.rs b/src/driver/aot.rs
+index a52b1857..70215b81 100644
+--- a/src/driver/aot.rs
++++ b/src/driver/aot.rs
+@@ -55,7 +55,7 @@ fn hash_stable(&self, _: &mut HCX, _: &mut StableHasher) {
+     }
+ }
+ 
+-pub(crate) struct OngoingCodegen {
++pub struct OngoingCodegen {
+     modules: Vec<OngoingModuleCodegen>,
+     allocator_module: Option<CompiledModule>,
+     metadata_module: Option<CompiledModule>,
+@@ -65,7 +65,7 @@ pub(crate) struct OngoingCodegen {
+ }
+ 
+ impl OngoingCodegen {
+-    pub(crate) fn join(
++    pub fn join(
+         self,
+         sess: &Session,
+         outputs: &OutputFilenames,
+@@ -663,7 +663,7 @@ fn emit_allocator_module(tcx: TyCtxt<'_>) -> Option<CompiledModule> {
+     }
+ }
+ 
+-pub(crate) fn run_aot(
++pub fn run_aot(
+     tcx: TyCtxt<'_>,
+     metadata: EncodedMetadata,
+     need_metadata_module: bool,
+diff --git a/src/driver/jit.rs b/src/driver/jit.rs
+index 57c88f4b..97e60455 100644
+--- a/src/driver/jit.rs
++++ b/src/driver/jit.rs
+@@ -79,7 +79,7 @@ fn create_jit_module(tcx: TyCtxt<'_>, hotswap: bool) -> (UnwindModule<JITModule>
+     (jit_module, cx)
+ }
+ 
+-pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<String>) -> ! {
++pub fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<String>) -> ! {
+     if !tcx.sess.opts.output_types.should_codegen() {
+         tcx.dcx().fatal("JIT mode doesn't work with `cargo check`");
+     }
+@@ -198,7 +198,7 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+     }
+ }
+ 
+-pub(crate) fn codegen_and_compile_fn<'tcx>(
++pub fn codegen_and_compile_fn<'tcx>(
+     tcx: TyCtxt<'tcx>,
+     cx: &mut crate::CodegenCx,
+     cached_context: &mut Context,
+diff --git a/src/driver/mod.rs b/src/driver/mod.rs
+index ffd47cac..1d03b0ee 100644
+--- a/src/driver/mod.rs
++++ b/src/driver/mod.rs
+@@ -10,9 +10,9 @@
+ 
+ use crate::prelude::*;
+ 
+-pub(crate) mod aot;
++pub mod aot;
+ #[cfg(feature = "jit")]
+-pub(crate) mod jit;
++pub mod jit;
+ 
+ fn predefine_mono_items<'tcx>(
+     tcx: TyCtxt<'tcx>,
+diff --git a/src/lib.rs b/src/lib.rs
+index 2c019e75..13d9a5d4 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -13,26 +13,29 @@
+ // tidy-alphabetical-end
+ 
+ #[macro_use]
+-extern crate rustc_middle;
+-extern crate rustc_abi;
+-extern crate rustc_ast;
+-extern crate rustc_codegen_ssa;
+-extern crate rustc_data_structures;
+-extern crate rustc_errors;
+-extern crate rustc_fs_util;
+-extern crate rustc_hir;
+-extern crate rustc_incremental;
+-extern crate rustc_index;
+-extern crate rustc_metadata;
+-extern crate rustc_session;
+-extern crate rustc_span;
+-extern crate rustc_target;
++pub extern crate rustc_middle;
++pub extern crate rustc_abi;
++pub extern crate rustc_ast;
++pub extern crate rustc_codegen_ssa;
++pub extern crate rustc_data_structures;
++pub extern crate rustc_errors;
++pub extern crate rustc_fs_util;
++pub extern crate rustc_hir;
++pub extern crate rustc_incremental;
++pub extern crate rustc_index;
++pub extern crate rustc_metadata;
++pub extern crate rustc_session;
++pub extern crate rustc_span;
++pub extern crate rustc_target;
++pub extern crate rustc_interface;
++pub extern crate rustc_passes;
++pub extern crate rustc_driver_impl;
+ #[macro_use]
+ extern crate tracing;
+ 
+ // This prevents duplicating functions and statics that are already part of the host rustc process.
+ #[allow(unused_extern_crates)]
+-extern crate rustc_driver;
++pub extern crate rustc_driver;
+ 
+ use std::any::Any;
+ use std::env;
+@@ -51,37 +54,37 @@
+ pub use crate::config::*;
+ use crate::prelude::*;
+ 
+-mod abi;
+-mod allocator;
+-mod analyze;
+-mod base;
+-mod cast;
+-mod codegen_i128;
+-mod common;
+-mod compiler_builtins;
+-mod concurrency_limiter;
+-mod config;
+-mod constant;
+-mod debuginfo;
+-mod discriminant;
+-mod driver;
+-mod global_asm;
+-mod inline_asm;
+-mod intrinsics;
+-mod linkage;
+-mod main_shim;
+-mod num;
+-mod optimize;
+-mod pointer;
+-mod pretty_clif;
+-mod toolchain;
+-mod trap;
+-mod unsize;
+-mod unwind_module;
+-mod value_and_place;
+-mod vtable;
+-
+-mod prelude {
++pub mod abi;
++pub mod allocator;
++pub mod analyze;
++pub mod base;
++pub mod cast;
++pub mod codegen_i128;
++pub mod common;
++pub mod compiler_builtins;
++pub mod concurrency_limiter;
++pub mod config;
++pub mod constant;
++pub mod debuginfo;
++pub mod discriminant;
++pub mod driver;
++pub mod global_asm;
++pub mod inline_asm;
++pub mod intrinsics;
++pub mod linkage;
++pub mod main_shim;
++pub mod num;
++pub mod optimize;
++pub mod pointer;
++pub mod pretty_clif;
++pub mod toolchain;
++pub mod trap;
++pub mod unsize;
++pub mod unwind_module;
++pub mod value_and_place;
++pub mod vtable;
++
++pub mod prelude {
+     pub(crate) use cranelift_codegen::Context;
+     pub(crate) use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
+     pub(crate) use cranelift_codegen::ir::function::Function;
