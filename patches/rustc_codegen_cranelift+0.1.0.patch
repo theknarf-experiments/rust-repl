@@ -30,10 +30,18 @@ index a52b1857..70215b81 100644
      metadata: EncodedMetadata,
      need_metadata_module: bool,
 diff --git a/src/driver/jit.rs b/src/driver/jit.rs
-index 57c88f4b..7b76aeb3 100644
+index 57c88f4b..fc883ecf 100644
 --- a/src/driver/jit.rs
 +++ b/src/driver/jit.rs
-@@ -41,6 +41,7 @@ enum UnsafeMessage {
+@@ -28,6 +28,7 @@ struct JitState {
+ 
+ /// The Sender owned by the rustc thread
+ static GLOBAL_MESSAGE_SENDER: OnceLock<Mutex<mpsc::Sender<UnsafeMessage>>> = OnceLock::new();
++static GLOBAL_MESSAGE_RECEIVER: OnceLock<Mutex<mpsc::Receiver<UnsafeMessage>>> = OnceLock::new();
+ 
+ /// A message that is sent from the jitted runtime to the rustc thread.
+ /// Senders are responsible for upholding `Send` semantics.
+@@ -41,6 +42,7 @@ enum UnsafeMessage {
          trampoline_ptr: *const u8,
          tx: mpsc::Sender<*const u8>,
      },
@@ -41,7 +49,7 @@ index 57c88f4b..7b76aeb3 100644
  }
  unsafe impl Send for UnsafeMessage {}
  
-@@ -79,7 +80,7 @@ fn create_jit_module(tcx: TyCtxt<'_>, hotswap: bool) -> (UnwindModule<JITModule>
+@@ -79,7 +81,7 @@ fn create_jit_module(tcx: TyCtxt<'_>, hotswap: bool) -> (UnwindModule<JITModule>
      (jit_module, cx)
  }
  
@@ -50,7 +58,7 @@ index 57c88f4b..7b76aeb3 100644
      if !tcx.sess.opts.output_types.should_codegen() {
          tcx.dcx().fatal("JIT mode doesn't work with `cargo check`");
      }
-@@ -141,9 +142,11 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+@@ -141,9 +143,11 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
  
      jit_module.finalize_definitions();
  
@@ -62,16 +70,21 @@ index 57c88f4b..7b76aeb3 100644
  
      let args = std::iter::once(&*tcx.crate_name(LOCAL_CRATE).as_str().to_string())
          .chain(jit_args.iter().map(|arg| &**arg))
-@@ -171,7 +174,7 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+@@ -170,8 +174,11 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+     let f: extern "C" fn(c_int, *const *const c_char) -> c_int =
          unsafe { ::std::mem::transmute(finalized_start) };
  
-     let (tx, rx) = mpsc::channel();
+-    let (tx, rx) = mpsc::channel();
 -    GLOBAL_MESSAGE_SENDER.set(Mutex::new(tx)).unwrap();
-+    let _ = GLOBAL_MESSAGE_SENDER.set(Mutex::new(tx));
++    {
++        let (tx, rx) = mpsc::channel();
++        let _ = GLOBAL_MESSAGE_SENDER.set(Mutex::new(tx));
++        let _ = GLOBAL_MESSAGE_RECEIVER.set(Mutex::new(rx));
++    }
  
      // Spawn the jitted runtime in a new thread so that this rustc thread can handle messages
      // (eg to lazily JIT further functions as required)
-@@ -183,7 +186,8 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+@@ -183,22 +190,33 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
          argv.push(std::ptr::null());
  
          let ret = f(args.len() as c_int, argv.as_ptr());
@@ -80,8 +93,19 @@ index 57c88f4b..7b76aeb3 100644
 +        UnsafeMessage::Done.send();
      });
  
++    use std::ops::Deref;
++    let lock =
++        GLOBAL_MESSAGE_RECEIVER
++            .get().unwrap()
++            .lock().unwrap();
++    let LOCAL_MESSAGE_RECEIVER: &mpsc::Receiver<UnsafeMessage> = lock.deref();
++
      // Handle messages
-@@ -194,11 +198,14 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+     loop {
+-        match rx.recv().unwrap() {
++        match LOCAL_MESSAGE_RECEIVER.recv().unwrap() {
+             // lazy JIT compilation request - compile requested instance and return pointer to result
+             UnsafeMessage::JitFn { instance_ptr, trampoline_ptr, tx } => {
                  tx.send(jit_fn(instance_ptr, trampoline_ptr))
                      .expect("jitted runtime hung up before response to lazy JIT request was sent");
              }
