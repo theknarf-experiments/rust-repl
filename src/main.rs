@@ -8,7 +8,7 @@ use rustc_codegen_cranelift::{
     rustc_interface::{Config, interface::Compiler, run_compiler, passes},
     rustc_session::{
         EarlyDiagCtxt,
-        config::{Input, Options, ErrorOutputType},
+        config::{Input, ErrorOutputType},
         config,
     },
 		rustc_errors::{
@@ -24,7 +24,6 @@ use rustc_codegen_cranelift::{
 
 use rustc_codegen_cranelift::CodegenMode;
 use rustc_codegen_cranelift::driver::jit::run_jit;
-use std::sync::mpsc;
 use std::sync::atomic::AtomicBool;
 
 static USING_INTERNAL_FEATURES: AtomicBool = AtomicBool::new(false);
@@ -84,16 +83,15 @@ fn test(user_snippet: String) {
 
     drop(default_early_dcx);
 
-
-    let result = run_compiler(config, move |compiler: &Compiler| {
+    let _result = run_compiler(config, move |compiler: &Compiler| {
 				let sess = &compiler.sess;
-        let codegen_backend = &*compiler.codegen_backend;
+        let _codegen_backend = &*compiler.codegen_backend;
 
         // Parse the crate root source code (doesn't parse submodules yet)
         // Everything else is parsed during macro expansion.
-        let mut krate = passes::parse(sess);
+        let krate = passes::parse(sess);
 
-        let linker = passes::create_and_enter_global_ctxt(compiler, krate, |tcx| {
+        let _linker = passes::create_and_enter_global_ctxt(compiler, krate, |tcx| {
             // Make sure name resolution and macro expansion is run.
             let _ = tcx.resolver_for_lowering();
 
@@ -101,16 +99,11 @@ fn test(user_snippet: String) {
 
             tcx.ensure_ok().analysis(());
 
-						// We replicate logic from cg_clif driver
-						// But we call run_jit(tcx, CodegenMode::Jit, vec![])
-						// or run_jit(tcx, CodegenMode::JitLazy, vec![])
 						run_jit(
 								tcx,
 								CodegenMode::JitLazy,
 								vec![], // no command-line args
 						);
-						// `run_jit` eventually calls `main()` from the compiled code
-						// and does not return (it calls process::exit)
 				});
     });
 
@@ -125,7 +118,7 @@ fn repl() -> Result<()> {
             Ok(line) => {
                 let _ = rl.add_history_entry(line.as_str());
                 test(line.clone());
-                println!("Line: {}", line.clone());
+                //println!("Line: {}", line.clone());
             },
             Err(ReadlineError::Interrupted) => {
                 println!("CTRL-C");

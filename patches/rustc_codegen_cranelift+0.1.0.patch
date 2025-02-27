@@ -30,19 +30,65 @@ index a52b1857..70215b81 100644
      metadata: EncodedMetadata,
      need_metadata_module: bool,
 diff --git a/src/driver/jit.rs b/src/driver/jit.rs
-index 57c88f4b..97e60455 100644
+index 57c88f4b..7b76aeb3 100644
 --- a/src/driver/jit.rs
 +++ b/src/driver/jit.rs
-@@ -79,7 +79,7 @@ fn create_jit_module(tcx: TyCtxt<'_>, hotswap: bool) -> (UnwindModule<JITModule>
+@@ -41,6 +41,7 @@ enum UnsafeMessage {
+         trampoline_ptr: *const u8,
+         tx: mpsc::Sender<*const u8>,
+     },
++    Done,
+ }
+ unsafe impl Send for UnsafeMessage {}
+ 
+@@ -79,7 +80,7 @@ fn create_jit_module(tcx: TyCtxt<'_>, hotswap: bool) -> (UnwindModule<JITModule>
      (jit_module, cx)
  }
  
 -pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<String>) -> ! {
-+pub fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<String>) -> ! {
++pub fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<String>) {
      if !tcx.sess.opts.output_types.should_codegen() {
          tcx.dcx().fatal("JIT mode doesn't work with `cargo check`");
      }
-@@ -198,7 +198,7 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+@@ -141,9 +142,11 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+ 
+     jit_module.finalize_definitions();
+ 
++    /*
+     println!(
+         "Rustc codegen cranelift will JIT run the executable, because -Cllvm-args=mode=jit was passed"
+     );
++    */
+ 
+     let args = std::iter::once(&*tcx.crate_name(LOCAL_CRATE).as_str().to_string())
+         .chain(jit_args.iter().map(|arg| &**arg))
+@@ -171,7 +174,7 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+         unsafe { ::std::mem::transmute(finalized_start) };
+ 
+     let (tx, rx) = mpsc::channel();
+-    GLOBAL_MESSAGE_SENDER.set(Mutex::new(tx)).unwrap();
++    let _ = GLOBAL_MESSAGE_SENDER.set(Mutex::new(tx));
+ 
+     // Spawn the jitted runtime in a new thread so that this rustc thread can handle messages
+     // (eg to lazily JIT further functions as required)
+@@ -183,7 +186,8 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+         argv.push(std::ptr::null());
+ 
+         let ret = f(args.len() as c_int, argv.as_ptr());
+-        std::process::exit(ret);
++        //std::process::exit(ret);
++        UnsafeMessage::Done.send();
+     });
+ 
+     // Handle messages
+@@ -194,11 +198,14 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+                 tx.send(jit_fn(instance_ptr, trampoline_ptr))
+                     .expect("jitted runtime hung up before response to lazy JIT request was sent");
+             }
++            UnsafeMessage::Done => {
++                break;
++            }
+         }
      }
  }
  
@@ -68,7 +114,7 @@ index ffd47cac..1d03b0ee 100644
  fn predefine_mono_items<'tcx>(
      tcx: TyCtxt<'tcx>,
 diff --git a/src/lib.rs b/src/lib.rs
-index 2c019e75..13d9a5d4 100644
+index 2c019e75..dcea2f28 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -13,26 +13,29 @@
@@ -185,3 +231,20 @@ index 2c019e75..13d9a5d4 100644
      pub(crate) use cranelift_codegen::Context;
      pub(crate) use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
      pub(crate) use cranelift_codegen::ir::function::Function;
+@@ -208,6 +211,7 @@ fn codegen_crate(
+         metadata: EncodedMetadata,
+         need_metadata_module: bool,
+     ) -> Box<dyn Any> {
++        /*
+         info!("codegen crate {}", tcx.crate_name(LOCAL_CRATE));
+         let config = self.config.clone().unwrap_or_else(|| {
+             BackendConfig::from_opts(&tcx.sess.opts.cg.llvm_args)
+@@ -223,6 +227,8 @@ fn codegen_crate(
+                 tcx.dcx().fatal("jit support was disabled when compiling rustc_codegen_cranelift");
+             }
+         }
++        */
++        todo!();
+     }
+ 
+     fn join_codegen(
