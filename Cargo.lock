@@ -2806,6 +2806,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "psm"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f58e5423e24c18cc840e1c98370b3993c6649cd1678b4d24318bcf0a083cbe88"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2970,7 +2979,9 @@ dependencies = [
 name = "rust-repl"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "patch-crate",
+ "psm",
  "rustc_codegen_cranelift",
  "rustyline",
 ]

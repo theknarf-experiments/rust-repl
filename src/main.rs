@@ -1,5 +1,9 @@
 #![feature(rustc_private)]
 
+#![allow(internal_features)]
+#![feature(link_llvm_intrinsics)]
+extern crate libc; // 0.2.42
+
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
 
@@ -26,6 +30,17 @@ use rustc_codegen_cranelift::CodegenMode;
 use rustc_codegen_cranelift::driver::jit::run_jit;
 use std::sync::atomic::AtomicBool;
 
+use std::mem;
+use std::time::SystemTime;
+
+extern "C" {
+    #[link_name = "llvm.eh.sjlj.setjmp"]
+    pub fn setjmp(a: *mut i8) -> i32;
+    #[link_name = "llvm.eh.sjlj.longjmp"]
+    pub fn longjmp(a: *mut i8, b: i32) -> ();
+}
+
+
 static USING_INTERNAL_FEATURES: AtomicBool = AtomicBool::new(false);
 
 fn diagnostics_registry() -> Registry {
@@ -40,6 +55,58 @@ fn test(user_snippet: String) {
             {}
         }}
     "#, user_snippet);
+		/*
+    let src_code = format!(r#"
+#![feature(rustc_private)]
+
+#![allow(internal_features)]
+#![feature(link_llvm_intrinsics)]
+extern crate libc; // 0.2.42
+
+use std::mem;
+use std::time::SystemTime;
+
+const WIDTH: usize = mem::size_of::<usize>()*8;
+type Checkpoint = [i8; WIDTH];
+
+static mut JUMP_POINT: Checkpoint = [0; WIDTH];
+
+extern "C" {{
+    #[link_name = "llvm.eh.sjlj.setjmp"]
+    pub fn setjmp(a: *mut i8) -> i32;
+    #[link_name = "llvm.eh.sjlj.longjmp"]
+    pub fn longjmp(a: *mut i8, b: i32) -> ();
+}}
+
+fn now() {{
+    let now = SystemTime::now();
+    println!("{{:?}}", now);
+
+		#[allow(static_mut_refs)]
+    let ptr: *mut Checkpoint = unsafe {{ &mut JUMP_POINT }};
+    let franken_pointer: *mut i8 = unsafe {{ mem::transmute(ptr) }};
+    unsafe {{ longjmp(franken_pointer, 1) }};
+}}
+
+fn main() {{
+    //let mut buff: Checkpoint = [0; WIDTH];
+		#[allow(static_mut_refs)]
+    let ptr: *mut Checkpoint = unsafe {{ &mut JUMP_POINT }} ;
+    let franken_pointer: *mut i8 = unsafe {{ mem::transmute(ptr) }};
+
+    let rc = unsafe {{ setjmp(franken_pointer) }};
+    print!("{{}}\n", rc);
+    if rc != 0 {{
+        println!("early return!");
+    }} else {{
+        println!("jump point was successfully set.");
+        now();
+    }}
+
+		{}
+}}
+    "#, user_snippet);
+*/
 
     let at_args: Vec<String> = vec![
         "rustc".to_string(), // fake argv[0]

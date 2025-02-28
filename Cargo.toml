@@ -5,6 +5,8 @@ edition = "2021"
 build = "build.rs"
 
 [dependencies]
+libc = "0.2.170"
+psm = "0.1.25"
 rustc_codegen_cranelift = { git = "https://github.com/rust-lang/rustc_codegen_cranelift.git", revision = "30ece8da06882b9cbca9f7e73f6804c669449a17", features = [ "jit" ] }
 rustyline = "15.0.0"
 #rustc = { git = "https://github.com/rust-lang/rust.git", revision = "96cfc75584359ae7ad11cc45968059f29e7b44b7" }
