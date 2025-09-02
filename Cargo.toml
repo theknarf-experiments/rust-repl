@@ -5,17 +5,17 @@ edition = "2021"
 build = "build.rs"
 
 [dependencies]
-libc = "0.2.170"
-psm = "0.1.25"
-rustc_codegen_cranelift = { git = "https://github.com/rust-lang/rustc_codegen_cranelift.git", revision = "30ece8da06882b9cbca9f7e73f6804c669449a17", features = [ "jit" ] }
-rustyline = "15.0.0"
+libc = "0.2.175"
+psm = "0.1.26"
+rustc_codegen_cranelift = { git = "https://github.com/rust-lang/rustc_codegen_cranelift.git", rev = "9de73c86f373edec2381d17da180d9d533190519", features = [ "jit" ] }
+rustyline = "17.0.1"
 #rustc = { git = "https://github.com/rust-lang/rust.git", revision = "96cfc75584359ae7ad11cc45968059f29e7b44b7" }
 
 [build-dependencies]
-patch-crate = "0.1.12"
+patch-crate = "0.1.13"
 
 [package.metadata.patch]
 crates = ["rustc_codegen_cranelift"]
 
 [patch."https://github.com/rust-lang/rustc_codegen_cranelift.git"]
-rustc_codegen_cranelift = { path="./target/patch/30ece8d" }
+rustc_codegen_cranelift = { path="./target/patch/9de73c8" }

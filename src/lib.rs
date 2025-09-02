@@ -18,7 +18,6 @@ use rustc_codegen_cranelift::{
     },
 };
 
-use rustc_codegen_cranelift::CodegenMode;
 use rustc_codegen_cranelift::driver::jit::run_jit;
 use std::sync::atomic::AtomicBool;
 
@@ -69,6 +68,7 @@ pub fn run(src_code: String) {
         registry: diagnostics_registry(),
 				using_internal_features: &USING_INTERNAL_FEATURES,
         expanded_args: args,
+        extra_symbols: vec![],
     };
 
     drop(default_early_dcx);
@@ -91,7 +91,6 @@ pub fn run(src_code: String) {
 
 						run_jit(
 								tcx,
-								CodegenMode::JitLazy,
 								vec![], // no command-line args
 						);
 				});

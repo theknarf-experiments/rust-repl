@@ -1,136 +1,53 @@
-diff --git a/src/driver/aot.rs b/src/driver/aot.rs
-index a52b1857..70215b81 100644
---- a/src/driver/aot.rs
-+++ b/src/driver/aot.rs
-@@ -55,7 +55,7 @@ fn hash_stable(&self, _: &mut HCX, _: &mut StableHasher) {
-     }
- }
+diff --git a/src/base.rs b/src/base.rs
+index e4802e3..e76e431 100644
+--- a/src/base.rs
++++ b/src/base.rs
+@@ -45,15 +45,7 @@ pub(crate) fn codegen_fn<'tcx>(
+     let _timer = tcx.prof.generic_activity_with_arg("codegen fn", &*symbol_name);
  
--pub(crate) struct OngoingCodegen {
-+pub struct OngoingCodegen {
-     modules: Vec<OngoingModuleCodegen>,
-     allocator_module: Option<CompiledModule>,
-     metadata_module: Option<CompiledModule>,
-@@ -65,7 +65,7 @@ pub(crate) struct OngoingCodegen {
- }
+     let mir = tcx.instance_mir(instance.def);
+-    let _mir_guard = crate::PrintOnPanic(|| {
+-        let mut buf = Vec::new();
+-        with_no_trimmed_paths!({
+-            use rustc_middle::mir::pretty;
+-            let options = pretty::PrettyPrintMirOptions::from_cli(tcx);
+-            pretty::write_mir_fn(tcx, mir, &mut |_, _| Ok(()), &mut buf, options).unwrap();
+-        });
+-        String::from_utf8_lossy(&buf).into_owned()
+-    });
++    let _mir_guard = crate::PrintOnPanic(|| String::new());
  
- impl OngoingCodegen {
--    pub(crate) fn join(
-+    pub fn join(
-         self,
-         sess: &Session,
-         outputs: &OutputFilenames,
-@@ -663,7 +663,7 @@ fn emit_allocator_module(tcx: TyCtxt<'_>) -> Option<CompiledModule> {
-     }
- }
- 
--pub(crate) fn run_aot(
-+pub fn run_aot(
-     tcx: TyCtxt<'_>,
-     metadata: EncodedMetadata,
-     need_metadata_module: bool,
+     // Declare function
+     let sig = get_function_sig(tcx, module.target_config().default_call_conv, instance);
 diff --git a/src/driver/jit.rs b/src/driver/jit.rs
-index 57c88f4b..fc883ecf 100644
+index 3d33751..7777742 100644
 --- a/src/driver/jit.rs
 +++ b/src/driver/jit.rs
-@@ -28,6 +28,7 @@ struct JitState {
- 
- /// The Sender owned by the rustc thread
- static GLOBAL_MESSAGE_SENDER: OnceLock<Mutex<mpsc::Sender<UnsafeMessage>>> = OnceLock::new();
-+static GLOBAL_MESSAGE_RECEIVER: OnceLock<Mutex<mpsc::Receiver<UnsafeMessage>>> = OnceLock::new();
- 
- /// A message that is sent from the jitted runtime to the rustc thread.
- /// Senders are responsible for upholding `Send` semantics.
-@@ -41,6 +42,7 @@ enum UnsafeMessage {
-         trampoline_ptr: *const u8,
-         tx: mpsc::Sender<*const u8>,
-     },
-+    Done,
- }
- unsafe impl Send for UnsafeMessage {}
- 
-@@ -79,7 +81,7 @@ fn create_jit_module(tcx: TyCtxt<'_>, hotswap: bool) -> (UnwindModule<JITModule>
+@@ -32,7 +32,7 @@ fn create_jit_module(tcx: TyCtxt<'_>) -> (UnwindModule<JITModule>, Option<DebugC
      (jit_module, cx)
  }
  
--pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<String>) -> ! {
-+pub fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<String>) {
+-pub(crate) fn run_jit(tcx: TyCtxt<'_>, jit_args: Vec<String>) -> ! {
++pub fn run_jit(tcx: TyCtxt<'_>, jit_args: Vec<String>) -> i32 {
      if !tcx.sess.opts.output_types.should_codegen() {
          tcx.dcx().fatal("JIT mode doesn't work with `cargo check`");
      }
-@@ -141,9 +143,11 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
+@@ -117,7 +117,7 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, jit_args: Vec<String>) -> ! {
+     argv.push(std::ptr::null());
  
-     jit_module.finalize_definitions();
- 
-+    /*
-     println!(
-         "Rustc codegen cranelift will JIT run the executable, because -Cllvm-args=mode=jit was passed"
-     );
-+    */
- 
-     let args = std::iter::once(&*tcx.crate_name(LOCAL_CRATE).as_str().to_string())
-         .chain(jit_args.iter().map(|arg| &**arg))
-@@ -170,8 +174,11 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
-     let f: extern "C" fn(c_int, *const *const c_char) -> c_int =
-         unsafe { ::std::mem::transmute(finalized_start) };
- 
--    let (tx, rx) = mpsc::channel();
--    GLOBAL_MESSAGE_SENDER.set(Mutex::new(tx)).unwrap();
-+    {
-+        let (tx, rx) = mpsc::channel();
-+        let _ = GLOBAL_MESSAGE_SENDER.set(Mutex::new(tx));
-+        let _ = GLOBAL_MESSAGE_RECEIVER.set(Mutex::new(rx));
-+    }
- 
-     // Spawn the jitted runtime in a new thread so that this rustc thread can handle messages
-     // (eg to lazily JIT further functions as required)
-@@ -183,22 +190,33 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, codegen_mode: CodegenMode, jit_args: Vec<
-         argv.push(std::ptr::null());
- 
-         let ret = f(args.len() as c_int, argv.as_ptr());
--        std::process::exit(ret);
-+        //std::process::exit(ret);
-+        UnsafeMessage::Done.send();
-     });
- 
-+    use std::ops::Deref;
-+    let lock =
-+        GLOBAL_MESSAGE_RECEIVER
-+            .get().unwrap()
-+            .lock().unwrap();
-+    let LOCAL_MESSAGE_RECEIVER: &mpsc::Receiver<UnsafeMessage> = lock.deref();
-+
-     // Handle messages
-     loop {
--        match rx.recv().unwrap() {
-+        match LOCAL_MESSAGE_RECEIVER.recv().unwrap() {
-             // lazy JIT compilation request - compile requested instance and return pointer to result
-             UnsafeMessage::JitFn { instance_ptr, trampoline_ptr, tx } => {
-                 tx.send(jit_fn(instance_ptr, trampoline_ptr))
-                     .expect("jitted runtime hung up before response to lazy JIT request was sent");
-             }
-+            UnsafeMessage::Done => {
-+                break;
-+            }
-         }
-     }
+     let ret = f(args.len() as c_int, argv.as_ptr());
+-    std::process::exit(ret);
++    ret
  }
  
--pub(crate) fn codegen_and_compile_fn<'tcx>(
-+pub fn codegen_and_compile_fn<'tcx>(
-     tcx: TyCtxt<'tcx>,
-     cx: &mut crate::CodegenCx,
-     cached_context: &mut Context,
+ fn codegen_and_compile_fn<'tcx>(
 diff --git a/src/driver/mod.rs b/src/driver/mod.rs
-index ffd47cac..1d03b0ee 100644
+index 9f2b7b4..9cce902 100644
 --- a/src/driver/mod.rs
 +++ b/src/driver/mod.rs
-@@ -10,9 +10,9 @@
+@@ -12,7 +12,7 @@
  
- use crate::prelude::*;
- 
--pub(crate) mod aot;
-+pub mod aot;
+ pub(crate) mod aot;
  #[cfg(feature = "jit")]
 -pub(crate) mod jit;
 +pub mod jit;
@@ -138,10 +55,10 @@ index ffd47cac..1d03b0ee 100644
  fn predefine_mono_items<'tcx>(
      tcx: TyCtxt<'tcx>,
 diff --git a/src/lib.rs b/src/lib.rs
-index 2c019e75..dcea2f28 100644
+index 835fd9a..b98d865 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -13,26 +13,29 @@
+@@ -16,28 +16,31 @@
  // tidy-alphabetical-end
  
  #[macro_use]
@@ -149,6 +66,7 @@ index 2c019e75..dcea2f28 100644
 -extern crate rustc_abi;
 -extern crate rustc_ast;
 -extern crate rustc_codegen_ssa;
+-extern crate rustc_const_eval;
 -extern crate rustc_data_structures;
 -extern crate rustc_errors;
 -extern crate rustc_fs_util;
@@ -158,11 +76,13 @@ index 2c019e75..dcea2f28 100644
 -extern crate rustc_metadata;
 -extern crate rustc_session;
 -extern crate rustc_span;
+-extern crate rustc_symbol_mangling;
 -extern crate rustc_target;
 +pub extern crate rustc_middle;
 +pub extern crate rustc_abi;
 +pub extern crate rustc_ast;
 +pub extern crate rustc_codegen_ssa;
++pub extern crate rustc_const_eval;
 +pub extern crate rustc_data_structures;
 +pub extern crate rustc_errors;
 +pub extern crate rustc_fs_util;
@@ -172,12 +92,14 @@ index 2c019e75..dcea2f28 100644
 +pub extern crate rustc_metadata;
 +pub extern crate rustc_session;
 +pub extern crate rustc_span;
++pub extern crate rustc_symbol_mangling;
 +pub extern crate rustc_target;
 +pub extern crate rustc_interface;
 +pub extern crate rustc_passes;
 +pub extern crate rustc_driver_impl;
  #[macro_use]
- extern crate tracing;
+-extern crate tracing;
++pub extern crate tracing;
  
  // This prevents duplicating functions and statics that are already part of the host rustc process.
  #[allow(unused_extern_crates)]
@@ -186,89 +108,30 @@ index 2c019e75..dcea2f28 100644
  
  use std::any::Any;
  use std::env;
-@@ -51,37 +54,37 @@
- pub use crate::config::*;
- use crate::prelude::*;
- 
--mod abi;
--mod allocator;
--mod analyze;
--mod base;
--mod cast;
--mod codegen_i128;
--mod common;
--mod compiler_builtins;
--mod concurrency_limiter;
--mod config;
--mod constant;
--mod debuginfo;
--mod discriminant;
+@@ -69,7 +72,7 @@
+ mod constant;
+ mod debuginfo;
+ mod discriminant;
 -mod driver;
--mod global_asm;
--mod inline_asm;
--mod intrinsics;
--mod linkage;
--mod main_shim;
--mod num;
--mod optimize;
--mod pointer;
--mod pretty_clif;
--mod toolchain;
--mod trap;
--mod unsize;
--mod unwind_module;
--mod value_and_place;
--mod vtable;
--
--mod prelude {
-+pub mod abi;
-+pub mod allocator;
-+pub mod analyze;
-+pub mod base;
-+pub mod cast;
-+pub mod codegen_i128;
-+pub mod common;
-+pub mod compiler_builtins;
-+pub mod concurrency_limiter;
-+pub mod config;
-+pub mod constant;
-+pub mod debuginfo;
-+pub mod discriminant;
 +pub mod driver;
-+pub mod global_asm;
-+pub mod inline_asm;
-+pub mod intrinsics;
-+pub mod linkage;
-+pub mod main_shim;
-+pub mod num;
-+pub mod optimize;
-+pub mod pointer;
-+pub mod pretty_clif;
-+pub mod toolchain;
-+pub mod trap;
-+pub mod unsize;
-+pub mod unwind_module;
-+pub mod value_and_place;
-+pub mod vtable;
-+
-+pub mod prelude {
-     pub(crate) use cranelift_codegen::Context;
-     pub(crate) use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
-     pub(crate) use cranelift_codegen::ir::function::Function;
-@@ -208,6 +211,7 @@ fn codegen_crate(
-         metadata: EncodedMetadata,
-         need_metadata_module: bool,
-     ) -> Box<dyn Any> {
-+        /*
-         info!("codegen crate {}", tcx.crate_name(LOCAL_CRATE));
-         let config = self.config.clone().unwrap_or_else(|| {
-             BackendConfig::from_opts(&tcx.sess.opts.cg.llvm_args)
-@@ -223,6 +227,8 @@ fn codegen_crate(
-                 tcx.dcx().fatal("jit support was disabled when compiling rustc_codegen_cranelift");
-             }
+ mod global_asm;
+ mod inline_asm;
+ mod intrinsics;
+@@ -213,10 +216,14 @@ fn codegen_crate(&self, tcx: TyCtxt<'_>) -> Box<dyn Any> {
+         });
+         if config.jit_mode {
+             #[cfg(feature = "jit")]
+-            driver::jit::run_jit(tcx, config.jit_args);
+-
++            {
++                driver::jit::run_jit(tcx, config.jit_args);
++                return Box::new(());
++            }
+             #[cfg(not(feature = "jit"))]
+-            tcx.dcx().fatal("jit support was disabled when compiling rustc_codegen_cranelift");
++            {
++                tcx.dcx().fatal("jit support was disabled when compiling rustc_codegen_cranelift");
++            }
+         } else {
+             driver::aot::run_aot(tcx)
          }
-+        */
-+        todo!();
-     }
- 
-     fn join_codegen(
