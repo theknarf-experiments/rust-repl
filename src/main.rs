@@ -1,11 +1,12 @@
 #![feature(rustc_private)]
 use rust_repl::run;
 use rustyline::error::ReadlineError;
-use rustyline::{DefaultEditor, Result};
+use rustyline::{Cmd, DefaultEditor, KeyEvent, Result};
 use std::panic;
 
 fn repl() -> Result<()> {
     let mut rl = DefaultEditor::new()?;
+    rl.bind_sequence(KeyEvent::ctrl('j'), Cmd::Newline);
 
     loop {
         let readline = rl.readline(">> ");
