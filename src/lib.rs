@@ -98,3 +98,51 @@ pub fn run(src_code: String) {
 
 }
 
+#[cfg(test)]
+mod tests {
+    use super::run;
+    use std::fs::File;
+    use std::io::Read;
+    use std::os::unix::io::FromRawFd;
+
+    /// Capture everything written to stdout while executing `f`.
+    fn capture_stdout<F: FnOnce()>(f: F) -> String {
+        unsafe {
+            // Create a pipe to redirect stdout into.
+            let mut pipe_fds: [libc::c_int; 2] = [0; 2];
+            assert_eq!(libc::pipe(pipe_fds.as_mut_ptr()), 0);
+
+            // Save the original stdout file descriptor.
+            let stdout_fd = libc::dup(libc::STDOUT_FILENO);
+            assert!(stdout_fd >= 0);
+
+            // Redirect stdout to the write end of the pipe.
+            libc::dup2(pipe_fds[1], libc::STDOUT_FILENO);
+            libc::close(pipe_fds[1]);
+
+            // Run the provided function while stdout is captured.
+            f();
+
+            // Flush and restore stdout back to the original descriptor.
+            libc::fflush(std::ptr::null_mut());
+            libc::dup2(stdout_fd, libc::STDOUT_FILENO);
+            libc::close(stdout_fd);
+
+            // Read everything that was captured from the pipe.
+            let mut output = String::new();
+            let mut reader = File::from_raw_fd(pipe_fds[0]);
+            reader.read_to_string(&mut output).unwrap();
+            output
+        }
+    }
+
+    #[test]
+    fn run_prints_to_stdout() {
+        let out = capture_stdout(|| {
+            run("fn main() { println!(\"Hello from JIT!\"); }".to_string());
+        });
+
+        assert!(out.contains("Hello from JIT!"));
+    }
+}
+
