@@ -54,5 +54,9 @@ fn repl() -> Result<()> {
 }
 
 fn main() {
+    println!("Welcome to the experimental Rust REPL! 🦀");
+    println!("ctrl+j for newline");
+    println!("");
+
     let _ = repl();
 }
