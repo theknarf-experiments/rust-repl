@@ -1,5 +1,5 @@
 diff --git a/src/base.rs b/src/base.rs
-index e4802e3..e76e431 100644
+index e4802e30..e76e431c 100644
 --- a/src/base.rs
 +++ b/src/base.rs
 @@ -45,15 +45,7 @@ pub(crate) fn codegen_fn<'tcx>(
@@ -20,7 +20,7 @@ index e4802e3..e76e431 100644
      // Declare function
      let sig = get_function_sig(tcx, module.target_config().default_call_conv, instance);
 diff --git a/src/driver/jit.rs b/src/driver/jit.rs
-index 3d33751..7777742 100644
+index 3d33751f..215e334e 100644
 --- a/src/driver/jit.rs
 +++ b/src/driver/jit.rs
 @@ -32,7 +32,7 @@ fn create_jit_module(tcx: TyCtxt<'_>) -> (UnwindModule<JITModule>, Option<DebugC
@@ -32,7 +32,17 @@ index 3d33751..7777742 100644
      if !tcx.sess.opts.output_types.should_codegen() {
          tcx.dcx().fatal("JIT mode doesn't work with `cargo check`");
      }
-@@ -117,7 +117,7 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, jit_args: Vec<String>) -> ! {
+@@ -87,9 +87,6 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, jit_args: Vec<String>) -> ! {
+ 
+     let mut jit_module = jit_module.finalize_definitions();
+ 
+-    println!(
+-        "Rustc codegen cranelift will JIT run the executable, because -Cllvm-args=mode=jit was passed"
+-    );
+ 
+     let args = std::iter::once(&*tcx.crate_name(LOCAL_CRATE).as_str().to_string())
+         .chain(jit_args.iter().map(|arg| &**arg))
+@@ -117,7 +114,7 @@ pub(crate) fn run_jit(tcx: TyCtxt<'_>, jit_args: Vec<String>) -> ! {
      argv.push(std::ptr::null());
  
      let ret = f(args.len() as c_int, argv.as_ptr());
@@ -42,7 +52,7 @@ index 3d33751..7777742 100644
  
  fn codegen_and_compile_fn<'tcx>(
 diff --git a/src/driver/mod.rs b/src/driver/mod.rs
-index 9f2b7b4..9cce902 100644
+index 9f2b7b4b..9cce9026 100644
 --- a/src/driver/mod.rs
 +++ b/src/driver/mod.rs
 @@ -12,7 +12,7 @@
@@ -55,7 +65,7 @@ index 9f2b7b4..9cce902 100644
  fn predefine_mono_items<'tcx>(
      tcx: TyCtxt<'tcx>,
 diff --git a/src/lib.rs b/src/lib.rs
-index 835fd9a..b98d865 100644
+index 835fd9a4..b98d865b 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -16,28 +16,31 @@
